@@ -14,6 +14,12 @@
 #include "../gui/X11Window.hpp"
 #endif
 
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#else
+#include <strings.h>
+#endif
+
 using namespace kikset;
 
 namespace {

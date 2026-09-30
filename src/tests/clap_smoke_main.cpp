@@ -1,6 +1,18 @@
 // Loads the built .clap through dlopen and drives it like a minimal host:
 // entry/factory, params, state round trip, processing, and (if DISPLAY is set) the X11 GUI.
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#define RTLD_NOW 0
+static void* dlopen(const char* p, int) { return reinterpret_cast<void*>(LoadLibraryA(p)); }
+static void* dlsym(void* h, const char* s) {
+    return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(h), s));
+}
+static const char* dlerror() { return "LoadLibrary failed"; }
+#else
 #include <dlfcn.h>
+#endif
 
 #include <clap/clap.h>
 
