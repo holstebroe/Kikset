@@ -11,7 +11,6 @@ endif()
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 
 include(cmake/EmbedResources.cmake)
-include(cmake/DeployClap.cmake)
 include(CTest)
 
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/clap/include/clap/clap.h")
@@ -66,7 +65,17 @@ set_target_properties(kikset_clap PROPERTIES PREFIX "" OUTPUT_NAME "Kikset" SUFF
 if(NOT MSVC)
     set_target_properties(kikset_clap PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 endif()
-kikset_deploy_clap(kikset_clap)
+
+# Build the plugin and copy the .clap to the folder in the CLAPTEST environment
+# variable. Not part of ALL: a host that has the plugin loaded locks the file,
+# so a plain build should not fail on the copy.
+add_custom_target(deploy_clap
+    COMMAND ${CMAKE_COMMAND} -DCLAP_FILE=$<TARGET_FILE:kikset_clap>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DeployClap.cmake
+    COMMENT "Deploying Kikset.clap to %CLAPTEST%"
+    VERBATIM
+)
+add_dependencies(deploy_clap kikset_clap)
 
 # ---- tools
 add_executable(kikset_render src/tools/render_main.cpp)

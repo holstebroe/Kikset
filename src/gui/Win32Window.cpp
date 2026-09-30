@@ -99,7 +99,7 @@ Win32Window::Win32Window(Panel& panel, uintptr_t parent) : d_(new Impl(panel)) {
     wc.style = CS_DBLCLKS;
     wc.lpfnWndProc = &Impl::proc;
     wc.hInstance = inst;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));  // IDC_ARROW
     wc.lpszClassName = kClassName;
     RegisterClassExW(&wc);  // fails harmlessly if it already exists
 
