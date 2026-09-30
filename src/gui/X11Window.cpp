@@ -26,7 +26,7 @@ struct X11Window::Impl {
     }
 };
 
-X11Window::X11Window(Panel& panel, unsigned long parent) : d_(new Impl(panel)) {
+X11Window::X11Window(Panel& panel, uintptr_t parent) : d_(new Impl(panel)) {
     Impl& d = *d_;
     d.dpy = XOpenDisplay(nullptr);
     if (!d.dpy) return;

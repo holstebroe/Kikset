@@ -1,5 +1,6 @@
 // Tiny software renderer: 0x00RRGGBB framebuffer, AA lines/arcs, 5x7 bitmap font.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>

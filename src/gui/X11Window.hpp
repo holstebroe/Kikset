@@ -1,6 +1,7 @@
 // Minimal X11 window that shows a Panel. Used embedded (parent != 0) by the CLAP GUI
 // extension and stand-alone by kikset_gui_demo. Linux / X11 only.
 #pragma once
+#include <cstdint>
 #include <memory>
 
 #include "Panel.hpp"
@@ -10,7 +11,7 @@ namespace kikset::gui {
 class X11Window {
 public:
     // parent = X11 window id to embed into, or 0 for a top-level window.
-    X11Window(Panel& panel, unsigned long parent);
+    X11Window(Panel& panel, uintptr_t parent);
     ~X11Window();
     X11Window(const X11Window&) = delete;
     X11Window& operator=(const X11Window&) = delete;

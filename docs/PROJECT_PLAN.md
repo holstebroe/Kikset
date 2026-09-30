@@ -15,7 +15,7 @@ round-trips state, and renders a K‑B‑B‑B groove from host transport or fro
 | 2 Solver (analytic phase, Reset/Follow, anchor tests, render CLI) | **Done** |
 | 3 Voices (filters, envelopes, saturation + oversampler, bass drive, sub, clicks) | **Done**, see deviations |
 | 4 Flow (auto gain, emphasis, roll, push, meters) | **Done** (audio side). The meters need the GUI |
-| 5 GUI (panel, step buttons, wide scope, handoff zoom) | **Done on Linux/X11**; Win32 and Cocoa windows remain |
+| 5 GUI (panel, step buttons, wide scope, handoff zoom) | **Done** on Linux/X11 and Windows/Win32 (Win32 is untested: written without a Windows compiler). macOS (Cocoa) remains |
 | 6 Polish (presets, CI, docs, listening tests) | **Partly**: CI workflow and README written, not yet run |
 | 7 v1.1 | Not started |
 
@@ -54,6 +54,7 @@ round-trips state, and renders a K‑B‑B‑B groove from host transport or fro
 - [x] **Wide one-beat scope**: kick (orange) and bass (green) drawn from separate stems, step lanes, anchor lines, phase-error badge, per-step Flow gain in dB, pitch-curve overlay on a log Hz axis, settle point, Reset tail-gate marker, playhead
 - [x] **Handoff zoom** (±3 ms around the first anchor, kick and bass traces)
 - [x] Preview is rendered on the GUI thread by `renderBeatPreview()` whenever a parameter or the tempo changes, so the scope works with the transport stopped
+- [x] `Win32Window` (embeds into the host's HWND, self-timed via `WM_TIMER`) for REAPER and other Windows hosts. **Not yet compiled or run by me**: there is no Windows toolchain here
 - [x] `X11Window` (embed or top-level) plus `kikset_gui_demo` (`--screenshot`) for trying it without a host
 - [x] CLAP `gui` (X11) and `timer-support` extensions; lock-free GUI → audio edit queue with `request_flush`, param and gesture events reported to the host
 - [x] `gui_test`: renders frames and checks drag, wheel, double-click reset, step toggle, choice cycling and gesture reporting
@@ -97,7 +98,7 @@ Several of these pages could not be opened from this environment, so the numbers
 Priority: **P1** blocks a usable v1, **P2** needed for release quality, **P3** nice to have or v1.1.
 
 ### P1
-1. **GUI on Windows and macOS.** Only the X11 window exists. Needs `Win32Window` and `CocoaWindow` (the `Panel` is portable) and the matching CLAP `gui` API branches. Also HiDPI scaling (`set_scale` is accepted but ignored)
+1. **GUI on macOS, and verifying Win32.** `CocoaWindow` is missing; `Win32Window` needs a real test in REAPER (the `Panel` is portable) and the matching CLAP `gui` API branches. Also HiDPI scaling (`set_scale` is accepted but ignored)
    - Acidus' `GuiWindow` sources were not available in this environment, so the window code is new rather than ported
    - Scope shows the preview beat, not the live audio beat. The design's audio → GUI triple buffer is not built
    - Missing from the design: log/dB scope toggle, faint sum trace, scope drag-editing of Curve/Punch (v1.1), Advanced page for the remaining params (Bass Oct, Interval etc. are on the main panel already)

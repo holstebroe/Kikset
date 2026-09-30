@@ -10,9 +10,7 @@
 
 #include "../core/KiksetEngine.hpp"
 #include "../core/ParamText.hpp"
-#ifdef KIKSET_HAS_X11
-#include "../gui/X11Window.hpp"
-#endif
+#include "../gui/PlatformWindow.hpp"
 
 #ifdef _MSC_VER
 #define strcasecmp _stricmp
@@ -48,7 +46,7 @@ struct Plugin {
         qTail.store(n, std::memory_order_release);
         return true;
     }
-#ifdef KIKSET_HAS_X11
+#ifdef KIKSET_HAS_GUI
     struct Gui;
     Gui* gui = nullptr;
 #endif
@@ -266,18 +264,18 @@ const clap_plugin_latency_t kLatencyExt = {latencyGet};
 
 
 // --------------------------------------------------------------------- gui
-#ifdef KIKSET_HAS_X11
+#ifdef KIKSET_HAS_GUI
 struct Plugin::Gui {
     std::unique_ptr<gui::Panel> panel;
-    std::unique_ptr<gui::X11Window> win;
+    std::unique_ptr<gui::PlatformWindow> win;
     clap_id timer = CLAP_INVALID_ID;
 };
 
 bool guiIsApiSupported(const clap_plugin_t*, const char* api, bool floating) {
-    return !floating && !std::strcmp(api, CLAP_WINDOW_API_X11);
+    return !floating && !std::strcmp(api, KIKSET_CLAP_WINDOW_API);
 }
 bool guiGetPreferredApi(const clap_plugin_t*, const char** api, bool* floating) {
-    *api = CLAP_WINDOW_API_X11;
+    *api = KIKSET_CLAP_WINDOW_API;
     *floating = false;
     return true;
 }
@@ -331,8 +329,13 @@ bool guiAdjustSize(const clap_plugin_t*, uint32_t* w, uint32_t* h) {
 bool guiSetSize(const clap_plugin_t*, uint32_t w, uint32_t h) { return w == gui::Panel::W && h == gui::Panel::H; }
 bool guiSetParent(const clap_plugin_t* plugin, const clap_window_t* window) {
     Plugin* pl = P(plugin);
-    if (!pl->gui || std::strcmp(window->api, CLAP_WINDOW_API_X11) != 0) return false;
-    pl->gui->win = std::make_unique<gui::X11Window>(*pl->gui->panel, window->x11);
+    if (!pl->gui || std::strcmp(window->api, KIKSET_CLAP_WINDOW_API) != 0) return false;
+#if defined(KIKSET_HAS_X11)
+    const uintptr_t handle = uintptr_t(window->x11);
+#else
+    const uintptr_t handle = reinterpret_cast<uintptr_t>(window->win32);
+#endif
+    pl->gui->win = std::make_unique<gui::PlatformWindow>(*pl->gui->panel, handle);
     return pl->gui->win->ok();
 }
 bool guiSetTransient(const clap_plugin_t*, const clap_window_t*) { return true; }
@@ -341,9 +344,11 @@ bool guiShow(const clap_plugin_t* plugin) {
     Plugin* pl = P(plugin);
     if (!pl->gui || !pl->gui->win) return false;
     pl->gui->win->show();
+#if defined(KIKSET_HAS_X11)  // the Win32 window drives itself from WM_TIMER
     if (pl->gui->timer == CLAP_INVALID_ID)
         if (auto* t = static_cast<const clap_host_timer_support_t*>(pl->host->get_extension(pl->host, CLAP_EXT_TIMER_SUPPORT)))
             t->register_timer(pl->host, 33, &pl->gui->timer);
+#endif
     return true;
 }
 bool guiHide(const clap_plugin_t* plugin) {
@@ -372,7 +377,7 @@ bool init(const clap_plugin_t* plugin) {
 }
 
 void destroy(const clap_plugin_t* plugin) {
-#ifdef KIKSET_HAS_X11
+#ifdef KIKSET_HAS_GUI
     guiDestroy(plugin);
 #endif
     delete P(plugin);
@@ -450,7 +455,7 @@ const void* getExtension(const clap_plugin_t*, const char* id) {
     if (!std::strcmp(id, CLAP_EXT_AUDIO_PORTS)) return &kAudioPortsExt;
     if (!std::strcmp(id, CLAP_EXT_NOTE_PORTS)) return &kNotePortsExt;
     if (!std::strcmp(id, CLAP_EXT_LATENCY)) return &kLatencyExt;
-#ifdef KIKSET_HAS_X11
+#ifdef KIKSET_HAS_GUI
     if (!std::strcmp(id, CLAP_EXT_GUI)) return &kGuiExt;
     if (!std::strcmp(id, CLAP_EXT_TIMER_SUPPORT)) return &kTimerExt;
 #endif
