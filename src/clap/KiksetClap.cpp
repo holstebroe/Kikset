@@ -9,6 +9,10 @@
 #include <string>
 
 #include "../core/KiksetEngine.hpp"
+#include "../core/ParamText.hpp"
+#ifdef KIKSET_HAS_X11
+#include "../gui/X11Window.hpp"
+#endif
 
 using namespace kikset;
 
@@ -23,6 +27,25 @@ struct Plugin {
     std::atomic<double> pending[kMaxParamId];  // state-load -> audio
     std::atomic<bool> pendingDirty[kMaxParamId];
     std::atomic<bool> anyPending{false};
+
+    // GUI (main thread) -> audio thread edits; single producer, single consumer.
+    struct GuiMsg { uint32_t id; double value; int type; };  // 0 value, 1 gesture begin, 2 gesture end
+    static constexpr uint32_t kQ = 1024;
+    GuiMsg queue[kQ];
+    std::atomic<uint32_t> qHead{0}, qTail{0};
+    std::atomic<double> tempo{145.0};
+    std::atomic<bool> playing{false};
+    bool guiPush(const GuiMsg& m) {
+        const uint32_t t = qTail.load(std::memory_order_relaxed), n = (t + 1) % kQ;
+        if (n == qHead.load(std::memory_order_acquire)) return false;
+        queue[t] = m;
+        qTail.store(n, std::memory_order_release);
+        return true;
+    }
+#ifdef KIKSET_HAS_X11
+    struct Gui;
+    Gui* gui = nullptr;
+#endif
 };
 
 Plugin* P(const clap_plugin_t* p) { return static_cast<Plugin*>(p->plugin_data); }
@@ -50,36 +73,9 @@ bool paramsGetValue(const clap_plugin_t* pl, clap_id id, double* v) {
     return true;
 }
 
-const char* const kKeyNames[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-const char* const kSatNames[] = {"Soft", "Tube", "Diode", "Tape"};
-
 bool paramsValueToText(const clap_plugin_t*, clap_id id, double v, char* out, uint32_t n) {
-    const ParamInfo* p = findParam(id);
-    if (!p) return false;
-    v = sanitizeParam(id, v);
-    switch (id) {
-        case P_Key: std::snprintf(out, n, "%s", kKeyNames[int(v)]); return true;
-        case P_PlayMode: std::snprintf(out, n, "%s", v > 0.5 ? "MIDI Gate" : "Host"); return true;
-        case P_PhaseMode: std::snprintf(out, n, "%s", v > 0.5 ? "Follow" : "Reset"); return true;
-        case P_SatType: std::snprintf(out, n, "%s", kSatNames[int(v)]); return true;
-        case P_FilterType: std::snprintf(out, n, "%s", v > 0.5 ? "OTA 12" : "Ladder 24"); return true;
-        case P_Step1On: case P_Step2On: case P_Step3On:
-            std::snprintf(out, n, "%s", v > 0.5 ? "On" : "Off"); return true;
-        default: break;
-    }
-    const char* u = "";
-    switch (p->unit) {
-        case Unit::Ms: u = " ms"; break;
-        case Unit::Degrees: u = " deg"; break;
-        case Unit::Db: u = " dB"; break;
-        case Unit::Hz: u = " Hz"; break;
-        case Unit::Octaves: u = " oct"; break;
-        case Unit::Semitones: u = " st"; break;
-        case Unit::T16: u = " T16"; break;
-        default: break;
-    }
-    if (p->stepped) std::snprintf(out, n, "%d%s", int(v), u);
-    else std::snprintf(out, n, "%.2f%s", v, u);
+    if (!findParam(id)) return false;
+    std::snprintf(out, n, "%s", paramText(id, v).c_str());
     return true;
 }
 
@@ -88,7 +84,7 @@ bool paramsTextToValue(const clap_plugin_t*, clap_id id, const char* text, doubl
     if (!p) return false;
     if (id == P_Key) {
         for (int i = 0; i < 12; ++i)
-            if (strcasecmp(text, kKeyNames[i]) == 0) { *out = i; return true; }
+            if (strcasecmp(text, keyNames()[i]) == 0) { *out = i; return true; }
     }
     char* end = nullptr;
     const double v = std::strtod(text, &end);
@@ -140,9 +136,38 @@ void applyPending(Plugin* pl) {
         }
 }
 
-void paramsFlush(const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t*) {
+// Applies queued GUI edits to the engine and reports them to the host.
+void drainGui(Plugin* pl, const clap_output_events_t* out) {
+    for (;;) {
+        const uint32_t h = pl->qHead.load(std::memory_order_relaxed);
+        if (h == pl->qTail.load(std::memory_order_acquire)) break;
+        const Plugin::GuiMsg m = pl->queue[h];
+        pl->qHead.store((h + 1) % Plugin::kQ, std::memory_order_release);
+        if (m.type == 0) pl->engine.setParam(m.id, m.value);
+        if (!out) continue;
+        if (m.type == 0) {
+            clap_event_param_value_t e{};
+            e.header = {sizeof(e), 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_IS_LIVE};
+            e.param_id = m.id;
+            e.cookie = nullptr;
+            e.note_id = -1; e.port_index = -1; e.channel = -1; e.key = -1;
+            e.value = m.value;
+            out->try_push(out, &e.header);
+        } else {
+            clap_event_param_gesture_t e{};
+            e.header = {sizeof(e), 0, CLAP_CORE_EVENT_SPACE_ID,
+                        uint16_t(m.type == 1 ? CLAP_EVENT_PARAM_GESTURE_BEGIN : CLAP_EVENT_PARAM_GESTURE_END),
+                        CLAP_EVENT_IS_LIVE};
+            e.param_id = m.id;
+            out->try_push(out, &e.header);
+        }
+    }
+}
+
+void paramsFlush(const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out) {
     Plugin* pl = P(plugin);
     applyPending(pl);
+    drainGui(pl, out);
     for (uint32_t i = 0; i < in->size(in); ++i) applyEvent(pl, in->get(in, i));
 }
 
@@ -233,6 +258,105 @@ const clap_plugin_note_ports_t kNotePortsExt = {notePortsCount, notePortsGet};
 uint32_t latencyGet(const clap_plugin_t*) { return 0; }
 const clap_plugin_latency_t kLatencyExt = {latencyGet};
 
+
+// --------------------------------------------------------------------- gui
+#ifdef KIKSET_HAS_X11
+struct Plugin::Gui {
+    std::unique_ptr<gui::Panel> panel;
+    std::unique_ptr<gui::X11Window> win;
+    clap_id timer = CLAP_INVALID_ID;
+};
+
+bool guiIsApiSupported(const clap_plugin_t*, const char* api, bool floating) {
+    return !floating && !std::strcmp(api, CLAP_WINDOW_API_X11);
+}
+bool guiGetPreferredApi(const clap_plugin_t*, const char** api, bool* floating) {
+    *api = CLAP_WINDOW_API_X11;
+    *floating = false;
+    return true;
+}
+bool guiCreate(const clap_plugin_t* plugin, const char* api, bool floating) {
+    Plugin* pl = P(plugin);
+    if (!guiIsApiSupported(plugin, api, floating) || pl->gui) return false;
+    auto* g = new Plugin::Gui();
+    gui::PanelHost h;
+    h.get = [pl](uint32_t id) { return pl->values[id < kMaxParamId ? id : 0].load(std::memory_order_relaxed); };
+    h.set = [pl](uint32_t id, double v) {
+        v = sanitizeParam(id, v);
+        pl->values[id].store(v, std::memory_order_relaxed);
+        pl->guiPush({id, v, 0});
+        if (auto* ext = static_cast<const clap_host_params_t*>(pl->host->get_extension(pl->host, CLAP_EXT_PARAMS)))
+            ext->request_flush(pl->host);
+    };
+    h.gesture = [pl](uint32_t id, bool begin) {
+        pl->guiPush({id, 0.0, begin ? 1 : 2});
+        if (auto* ext = static_cast<const clap_host_params_t*>(pl->host->get_extension(pl->host, CLAP_EXT_PARAMS)))
+            ext->request_flush(pl->host);
+    };
+    h.tempo = [pl] { return pl->tempo.load(std::memory_order_relaxed); };
+    h.beatPos = [pl] { return pl->engine.beatPosition.load(std::memory_order_relaxed); };
+    h.playing = [pl] { return pl->playing.load(std::memory_order_relaxed); };
+    g->panel = std::make_unique<gui::Panel>(std::move(h));
+    pl->gui = g;
+    return true;
+}
+void guiDestroy(const clap_plugin_t* plugin) {
+    Plugin* pl = P(plugin);
+    if (!pl->gui) return;
+    if (pl->gui->timer != CLAP_INVALID_ID)
+        if (auto* t = static_cast<const clap_host_timer_support_t*>(pl->host->get_extension(pl->host, CLAP_EXT_TIMER_SUPPORT)))
+            t->unregister_timer(pl->host, pl->gui->timer);
+    delete pl->gui;
+    pl->gui = nullptr;
+}
+bool guiSetScale(const clap_plugin_t*, double) { return true; }
+bool guiGetSize(const clap_plugin_t*, uint32_t* w, uint32_t* h) {
+    *w = gui::Panel::W;
+    *h = gui::Panel::H;
+    return true;
+}
+bool guiCanResize(const clap_plugin_t*) { return false; }
+bool guiGetResizeHints(const clap_plugin_t*, clap_gui_resize_hints_t*) { return false; }
+bool guiAdjustSize(const clap_plugin_t*, uint32_t* w, uint32_t* h) {
+    *w = gui::Panel::W;
+    *h = gui::Panel::H;
+    return true;
+}
+bool guiSetSize(const clap_plugin_t*, uint32_t w, uint32_t h) { return w == gui::Panel::W && h == gui::Panel::H; }
+bool guiSetParent(const clap_plugin_t* plugin, const clap_window_t* window) {
+    Plugin* pl = P(plugin);
+    if (!pl->gui || std::strcmp(window->api, CLAP_WINDOW_API_X11) != 0) return false;
+    pl->gui->win = std::make_unique<gui::X11Window>(*pl->gui->panel, window->x11);
+    return pl->gui->win->ok();
+}
+bool guiSetTransient(const clap_plugin_t*, const clap_window_t*) { return true; }
+void guiSuggestTitle(const clap_plugin_t*, const char*) {}
+bool guiShow(const clap_plugin_t* plugin) {
+    Plugin* pl = P(plugin);
+    if (!pl->gui || !pl->gui->win) return false;
+    pl->gui->win->show();
+    if (pl->gui->timer == CLAP_INVALID_ID)
+        if (auto* t = static_cast<const clap_host_timer_support_t*>(pl->host->get_extension(pl->host, CLAP_EXT_TIMER_SUPPORT)))
+            t->register_timer(pl->host, 33, &pl->gui->timer);
+    return true;
+}
+bool guiHide(const clap_plugin_t* plugin) {
+    Plugin* pl = P(plugin);
+    if (!pl->gui || !pl->gui->win) return false;
+    pl->gui->win->hide();
+    return true;
+}
+const clap_plugin_gui_t kGuiExt = {guiIsApiSupported, guiGetPreferredApi, guiCreate, guiDestroy, guiSetScale,
+                                   guiGetSize, guiCanResize, guiGetResizeHints, guiAdjustSize, guiSetSize,
+                                   guiSetParent, guiSetTransient, guiSuggestTitle, guiShow, guiHide};
+
+void timerOnTimer(const clap_plugin_t* plugin, clap_id id) {
+    Plugin* pl = P(plugin);
+    if (pl->gui && pl->gui->win && id == pl->gui->timer) pl->gui->win->pump();
+}
+const clap_plugin_timer_support_t kTimerExt = {timerOnTimer};
+#endif
+
 // ------------------------------------------------------------------ plugin
 bool init(const clap_plugin_t* plugin) {
     Plugin* pl = P(plugin);
@@ -241,7 +365,12 @@ bool init(const clap_plugin_t* plugin) {
     return true;
 }
 
-void destroy(const clap_plugin_t* plugin) { delete P(plugin); }
+void destroy(const clap_plugin_t* plugin) {
+#ifdef KIKSET_HAS_X11
+    guiDestroy(plugin);
+#endif
+    delete P(plugin);
+}
 
 bool activate(const clap_plugin_t* plugin, double sr, uint32_t, uint32_t) {
     Plugin* pl = P(plugin);
@@ -258,6 +387,7 @@ void resetPlugin(const clap_plugin_t* plugin) { P(plugin)->engine.reset(); }
 clap_process_status process(const clap_plugin_t* plugin, const clap_process_t* pr) {
     Plugin* pl = P(plugin);
     applyPending(pl);
+    drainGui(pl, pr->out_events);
     if (pr->audio_outputs_count < 1 || pr->audio_outputs[0].channel_count < 2) return CLAP_PROCESS_ERROR;
     float* L = pr->audio_outputs[0].data32[0];
     float* R = pr->audio_outputs[0].data32[1];
@@ -274,6 +404,7 @@ clap_process_status process(const clap_plugin_t* plugin, const clap_process_t* p
             haveBeats = true;
         }
     }
+    pl->tempo.store(tr.tempo, std::memory_order_relaxed);
     if (!haveBeats) tr.playing = false;  // no beat grid -> host mode idles (MIDI Gate self-clocks)
 
     const uint32_t nFrames = pr->frames_count;
@@ -300,6 +431,7 @@ clap_process_status process(const clap_plugin_t* plugin, const clap_process_t* p
         }
         if (next <= pos) next = nFrames;
         pl->engine.process(L + pos, R + pos, next - pos, tr);
+        pl->playing.store(tr.playing, std::memory_order_relaxed);
         if (tr.playing) tr.beatPos += double(next - pos) * tr.tempo / 60.0 / pl->sampleRate;
         pos = next;
     }
@@ -312,6 +444,10 @@ const void* getExtension(const clap_plugin_t*, const char* id) {
     if (!std::strcmp(id, CLAP_EXT_AUDIO_PORTS)) return &kAudioPortsExt;
     if (!std::strcmp(id, CLAP_EXT_NOTE_PORTS)) return &kNotePortsExt;
     if (!std::strcmp(id, CLAP_EXT_LATENCY)) return &kLatencyExt;
+#ifdef KIKSET_HAS_X11
+    if (!std::strcmp(id, CLAP_EXT_GUI)) return &kGuiExt;
+    if (!std::strcmp(id, CLAP_EXT_TIMER_SUPPORT)) return &kTimerExt;
+#endif
     return nullptr;
 }
 void onMainThread(const clap_plugin_t*) {}

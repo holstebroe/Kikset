@@ -65,13 +65,22 @@ void KiksetEngine::killVoices(double abs) {
     bass_.kill(abs);
 }
 
+namespace {
+// Onsets within 1e-4 samples of a sample boundary snap to it, so rounding noise in the
+// host beat position cannot move a note by a whole sample.
+double snapOnset(double a) {
+    const double r = std::round(a);
+    return std::fabs(a - r) < 1e-4 ? r : a;
+}
+}  // namespace
+
 void KiksetEngine::scheduleBeat(long /*beatIdx*/, double beatStartAbs, double tempo) {
     buildBeatPlan(plan_, params_, tempo, currentRoot(), cache_);
     KickVoice& kv = kicks_[kickParity_];
     kickParity_ ^= 1;
-    kv.start(plan_.kick, beatStartAbs + plan_.kick.beatStart * fs_, fs_, &clicks_);
+    kv.start(plan_.kick, snapOnset(beatStartAbs + plan_.kick.beatStart * fs_), fs_, &clicks_);
     for (int i = 0; i < 3; ++i)
-        if (plan_.notes[i].active) bass_.schedule(plan_.notes[i], beatStartAbs + plan_.notes[i].onset * fs_);
+        if (plan_.notes[i].active) bass_.schedule(plan_.notes[i], snapOnset(beatStartAbs + plan_.notes[i].onset * fs_));
 }
 
 void KiksetEngine::process(float* L, float* R, uint32_t n, const Transport& trIn, float* kickStem,

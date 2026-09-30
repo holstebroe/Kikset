@@ -33,6 +33,17 @@ build/kikset_render --bpm 145 --key 5 --bars 4 --out groove.wav --stems --param 
 |---|---|
 | `src/core` | Pure DSP: anchor solver, kick/bass voices, flow, engine. No CLAP/GUI includes. |
 | `src/clap` | CLAP entry, params, state, note and transport glue |
+| `src/gui` | Portable panel and software renderer, X11 window |
 | `src/tools`, `src/tests` | Render CLI, anchor/DSP/robustness tests, perf bench |
 | `tools/make_clicks.py` | Synthesises the click set in `resources/clicks/` |
 | `cmake/EmbedResources.cmake` | Embeds the click WAVs into `generated/ClickData.cpp` |
+
+## Editor (Linux / X11)
+
+The plugin embeds a 900x560 editor through the CLAP `gui` extension. To try it without a host:
+
+```sh
+build/kikset_gui_demo                       # opens a window
+xvfb-run -a build/kikset_gui_demo --screenshot panel.ppm
+python3 tools/ppm2png.py panel.ppm panel.png
+```

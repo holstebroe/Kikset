@@ -89,7 +89,7 @@ int main() {
         CHECK(peak > 0.1, "beat is silent (peak %g)", peak);
         // a note onset can land one sample earlier/later when the host beat position carries
         // ~1e-10 beats of rounding, which shows up as a single first-sample difference (< -74 dBFS)
-        CHECK(maxd < 2e-4, "beat 2 vs 102 differ by %g", maxd);
+        CHECK(maxd < 1e-5, "beat 2 vs 102 differ by %g", maxd);
         std::printf("determinism: peak %.3f, max diff %.2e\n", peak, maxd);
     }
 

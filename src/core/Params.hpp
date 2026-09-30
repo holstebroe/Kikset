@@ -41,7 +41,7 @@ struct ParamInfo {
 };
 
 // clang-format off
-inline constexpr std::array<ParamInfo, 53> kParams = {{
+inline constexpr std::array<ParamInfo, 48> kParams = {{
     {P_Key,         "Key",          "Global",  0, 11, 5, true,  false, Unit::None},
     {P_PlayMode,    "Play Mode",    "Global",  0, 1,  0, true,  false, Unit::None},
     {P_PhaseMode,   "Phase Mode",   "Global",  0, 1,  0, true,  false, Unit::None},
@@ -71,7 +71,7 @@ inline constexpr std::array<ParamInfo, 53> kParams = {{
     {P_Shape,       "Shape",        "Kick",  0.3, 4,  1.5, false, false, Unit::None},
     {P_Fishtail,    "Fishtail",     "Kick",    0, 1,  0.2, false, false, Unit::None},
     {P_KickDrive,   "Kick Drive",   "Kick/Drive", 0, 1, 0.2, false, false, Unit::None},
-    {P_ClickType,   "Click Type",   "Kick/Click", 0, 11, 0, true, false, Unit::None},
+    {P_ClickType,   "Click Type",   "Kick/Click", 0, 7, 0, true, false, Unit::None},
     {P_ClickLevel,  "Click Level",  "Kick/Click",-60, 0, -18, false, false, Unit::Db},
     {P_SatType,     "Sat Type",     "Kick/Drive", 0, 3, 0, true, false, Unit::None},
     {P_SatBias,     "Sat Bias",     "Kick/Drive",-1, 1, 0, false, false, Unit::None},
@@ -95,6 +95,9 @@ inline constexpr std::array<ParamInfo, 53> kParams = {{
     {P_Analog,      "Analog",       "Bass",    0, 1,  0.3, false, false, Unit::None},
 }};
 // clang-format on
+
+static_assert(kParams.back().id == P_Analog && kParams.back().name != nullptr,
+              "kParams size must match the number of rows");
 
 inline constexpr std::array<int, 6> kIntervals = {0, 2, 3, 4, 5, 7};
 
