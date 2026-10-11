@@ -9,11 +9,30 @@
 namespace kikset::gui {
 
 namespace {
-const Color kBg = rgb(22, 24, 28), kPanel = rgb(33, 36, 42), kEdge = rgb(58, 63, 72);
-const Color kText = rgb(205, 210, 220), kDim = rgb(120, 126, 138);
-const Color kKick = rgb(255, 140, 40), kBass = rgb(80, 220, 120), kAnchor = rgb(240, 220, 90);
-const Color kPitch = rgb(130, 190, 255), kGate = rgb(255, 90, 90);
-constexpr int kScopeX = 10, kScopeY = 44, kScopeW = 880, kScopeH = 160;
+// Modern GPU/Plugin Dark Palette
+const Color kBg           = rgb(12, 14, 18);        // Main deep dark grey-blue background
+const Color kHeaderBg     = rgb(18, 22, 28);        // Header background
+const Color kCardBg       = rgb(20, 24, 30);        // Section container background
+const Color kCardHeaderBg = rgb(26, 32, 40);        // Sub-header container background
+const Color kCardEdge     = rgb(38, 46, 58);        // Card boundary outline
+const Color kCardEdgeGlow = rgb(50, 60, 76);        // Hover/focus card outline
+const Color kControlBg    = rgb(15, 18, 24);        // Inner control container
+const Color kControlEdge  = rgb(42, 50, 64);        // Control stroke outline
+
+const Color kText         = rgb(225, 232, 242);     // Crisp primary text
+const Color kDim          = rgb(120, 132, 150);     // Secondary dimmed text
+const Color kMuted        = rgb(75, 85, 102);       // Subtle grid/background text
+
+const Color kKick         = rgb(255, 145, 30);      // Kick primary glow (Amber / Neon Orange)
+const Color kKickDim      = rgb(140, 75, 15);       // Kick track fill
+const Color kBass         = rgb(0, 220, 150);       // Bass primary glow (Bright Cyan-Green / Emerald)
+const Color kBassDim      = rgb(0, 100, 70);        // Bass track fill
+
+const Color kPitch        = rgb(60, 170, 255);      // Pitch overlay line (Electric Blue)
+const Color kAnchor       = rgb(255, 215, 0);       // Anchor vertical lines (Gold / Bright Yellow)
+const Color kGate         = rgb(255, 75, 85);       // Tail gate marker (Crimson / Coral Red)
+
+constexpr int kScopeX = 14, kScopeY = 44, kScopeW = 872, kScopeH = 160;
 constexpr float kPi = 3.14159265f;
 
 std::string fmt(const char* f, double a) { char b[64]; std::snprintf(b, sizeof b, f, a); return b; }
@@ -30,38 +49,45 @@ void Panel::add(Kind k, uint32_t id, int x, int y, int w, int h, const char* lab
 }
 
 void Panel::layout() {
-    // header
-    add(Kind::Choice, P_Key, 300, 10, 60, 24, "KEY");
-    add(Kind::Choice, P_PlayMode, 410, 10, 96, 24, "MODE");
-    add(Kind::Choice, P_PhaseMode, 560, 10, 80, 24, "PHASE");
-    // step row
-    add(Kind::Fixed, 0, 14, 224, 70, 40, "K");
-    for (int i = 0; i < 3; ++i) add(Kind::Step, P_Step1On + i, 14 + (i + 1) * 78, 224, 70, 40, "B");
-    add(Kind::Knob, P_TargetPhase, 14, 272, 62, 52, "TARGET");
-    for (int i = 0; i < 3; ++i) add(Kind::Knob, P_Emph1 + i, 14 + (i + 1) * 78, 272, 62, 52, "EMPH");
-    // feel row
+    // Top bar header choices
+    add(Kind::Choice, P_Key, 300, 8, 60, 24, "KEY");
+    add(Kind::Choice, P_PlayMode, 410, 8, 96, 24, "MODE");
+    add(Kind::Choice, P_PhaseMode, 560, 8, 80, 24, "PHASE");
+
+    // Step row (Left card)
+    add(Kind::Fixed, 0, 18, 224, 68, 38, "K");
+    for (int i = 0; i < 3; ++i) add(Kind::Step, P_Step1On + i, 18 + (i + 1) * 74, 224, 68, 38, "B");
+    add(Kind::Knob, P_TargetPhase, 18, 270, 62, 50, "TARGET");
+    for (int i = 0; i < 3; ++i) add(Kind::Knob, P_Emph1 + i, 18 + (i + 1) * 74, 270, 62, 50, "EMPH");
+
+    // Feel row (Right card bottom controls)
     const uint32_t feel[] = {P_Flow, P_Roll, P_Push, P_Gel, P_LockStyle, P_Balance, P_Volume};
     const char* fl[] = {"FLOW", "ROLL", "PUSH", "GEL", "LOCK", "BAL", "VOL"};
-    for (int i = 0; i < 7; ++i) add(Kind::Knob, feel[i], 340 + i * 78, 322, 62, 52, fl[i]);
-    // kick
+    for (int i = 0; i < 7; ++i) add(Kind::Knob, feel[i], 338 + i * 76, 320, 62, 50, fl[i]);
+
+    // Kick parameters
     const struct { uint32_t id; const char* n; bool choice; } kick[] = {
         {P_KickTune, "TUNE", 0}, {P_Sweep, "SWEEP", 0}, {P_Curve, "CURVE", 0}, {P_Punch, "PUNCH", 0},
         {P_Settle, "SETTLE", 0}, {P_StartPhase, "START", 0}, {P_Length, "LENGTH", 0}, {P_Shape, "SHAPE", 0},
         {P_Fishtail, "FISH", 0}, {P_ClickType, "CLICK", 1}, {P_ClickLevel, "CLK LVL", 0}};
     for (int i = 0; i < 11; ++i)
-        add(kick[i].choice ? Kind::Choice : Kind::Knob, kick[i].id, 70 + i * 62, 384, 62, 52, kick[i].n);
+        add(kick[i].choice ? Kind::Choice : Kind::Knob, kick[i].id, 70 + i * 62, 382, 62, 50, kick[i].n);
+
+    // Kick Drive parameters
     const struct { uint32_t id; const char* n; bool choice; } drive[] = {
         {P_KickDrive, "DRIVE", 0}, {P_SatType, "TYPE", 1}, {P_SatBias, "BIAS", 0},
         {P_SatEnvFollow, "FOLLOW", 0}, {P_SatTone, "TONE", 0}};
     for (int i = 0; i < 5; ++i)
-        add(drive[i].choice ? Kind::Choice : Kind::Knob, drive[i].id, 70 + i * 62, 440, 62, 52, drive[i].n);
+        add(drive[i].choice ? Kind::Choice : Kind::Knob, drive[i].id, 70 + i * 62, 438, 62, 50, drive[i].n);
+
+    // Bass parameters
     const struct { uint32_t id; const char* n; bool choice; } bass[] = {
         {P_BassOct, "OCT", 1}, {P_Interval, "INTVL", 0}, {P_Wave, "WAVE", 0}, {P_Sub, "SUB", 0},
         {P_FilterType, "FILTER", 1}, {P_Cutoff, "CUTOFF", 0}, {P_Res, "RES", 0}, {P_EnvMod, "ENV MOD", 0},
         {P_FDecay, "F.DEC", 0}, {P_Attack, "ATTACK", 0}, {P_Snap, "SNAP", 0}, {P_Gate, "GATE", 0},
         {P_BassDrive, "DRIVE", 0}, {P_Third, "3RD-H", 0}, {P_Analog, "ANALOG", 0}};
     for (int i = 0; i < 15; ++i)
-        add(bass[i].choice ? Kind::Choice : Kind::Knob, bass[i].id, 70 + i * 54, 496, 54, 52, bass[i].n);
+        add(bass[i].choice ? Kind::Choice : Kind::Knob, bass[i].id, 70 + i * 54, 494, 54, 50, bass[i].n);
 }
 
 double Panel::norm(uint32_t id, double v) const {
@@ -188,71 +214,105 @@ void Panel::drawKnob(Graphics& g, const Ctl& c) {
     const double v = host_.get(c.id);
     const ParamInfo* p = findParam(c.id);
     const double n = norm(c.id, v);
-    const float cx = c.x + c.w / 2.f, cy = c.y + 26.f, r = 13.f;
-    g.text(int(cx), c.y + 2, c.label, kDim, 1, 1);
+    const float cx = c.x + c.w / 2.f, cy = c.y + 24.f, r = 12.f;
+
+    // Label
+    g.text(int(cx), c.y + 1, c.label, kDim, 1, 1);
+
+    // Outer dial rim
     const float a0 = kPi * 0.75f, a1 = kPi * 2.25f;
-    g.arc(cx, cy, r, a0, a1, kEdge, 2.f);
-    // bipolar params draw from the middle
+    g.arc(cx, cy, r + 1.f, a0, a1, rgb(25, 30, 38), 3.f);
+    g.arc(cx, cy, r, a0, a1, kCardEdge, 1.5f);
+
+    // Bipolar vs Unipolar arc rendering
     const bool bip = p->min < 0 && p->max > 0 && std::fabs(p->min + p->max) < 1e-9;
     const float an = a0 + float(n) * (a1 - a0);
-    const Color col = c.id >= P_BassOct ? kBass : (c.id >= P_KickTune ? kKick : kPitch);
-    if (bip) g.arc(cx, cy, r, std::min(an, (a0 + a1) / 2), std::max(an, (a0 + a1) / 2), col, 2.f);
-    else g.arc(cx, cy, r, a0, an, col, 2.f);
-    g.line(cx + std::cos(an) * 4, cy + std::sin(an) * 4, cx + std::cos(an) * (r - 1), cy + std::sin(an) * (r - 1),
-           kText);
-    g.text(int(cx), c.y + 42, paramText(c.id, v), kText, 1, 1);
+    const Color mainCol = c.id >= P_BassOct ? kBass : (c.id >= P_KickTune ? kKick : kPitch);
+
+    if (bip) {
+        float aMid = (a0 + a1) * 0.5f;
+        g.arc(cx, cy, r, std::min(an, aMid), std::max(an, aMid), mainCol, 2.5f);
+    } else {
+        g.arc(cx, cy, r, a0, an, mainCol, 2.5f);
+    }
+
+    // Pointer needle
+    float needleR = r - 2.f;
+    g.thickLine(cx, cy, cx + std::cos(an) * needleR, cy + std::sin(an) * needleR, kText, 1.5f);
+    g.fillCircle(cx, cy, 3.f, kControlBg);
+    g.circle(cx, cy, 3.f, mainCol, 1.f);
+
+    // Value text
+    g.text(int(cx), c.y + 40, paramText(c.id, v), kText, 1, 1);
 }
 
 void Panel::drawChoice(Graphics& g, const Ctl& c) {
     const bool header = c.y < 40;
-    const int bx = c.x + (header ? 0 : 4), bw = c.w - (header ? 0 : 8);
-    const int by = header ? c.y : c.y + 18, bh = header ? c.h : 18;
+    const int bx = c.x + (header ? 0 : 2), bw = c.w - (header ? 0 : 4);
+    const int by = header ? c.y : c.y + 16, bh = header ? c.h : 18;
     if (header) g.text(c.x - 6, c.y + 8, c.label, kDim, 1, 2);
-    else g.text(c.x + c.w / 2, c.y + 2, c.label, kDim, 1, 1);
-    g.fillRect(bx, by, bw, bh, kPanel);
-    g.rect(bx, by, bw, bh, kEdge);
+    else g.text(c.x + c.w / 2, c.y + 1, c.label, kDim, 1, 1);
+
+    // Futuristic pill container
+    g.fillRoundRect(bx, by, bw, bh, 4, kControlBg);
+    g.roundRect(bx, by, bw, bh, 4, kControlEdge);
     g.text(bx + bw / 2, by + (bh - 7) / 2, paramText(c.id, host_.get(c.id)), kText, 1, 1);
 }
 
 void Panel::drawStep(Graphics& g, const Ctl& c, int idx) {
     const bool on = c.kind == Kind::Fixed || host_.get(c.id) > 0.5;
     const Color col = c.kind == Kind::Fixed ? kKick : kBass;
-    g.fillRect(c.x, c.y, c.w, c.h, on ? rgb(col >> 16 & 255, col >> 8 & 255, col & 255) : kPanel, on ? 0.30f : 1.f);
-    g.rect(c.x, c.y, c.w, c.h, on ? col : kEdge);
-    // playhead light
+
+    // Modern button container
+    g.fillRoundRect(c.x, c.y, c.w, c.h, 6, on ? rgb((col >> 16 & 255) / 5, (col >> 8 & 255) / 5, (col & 255) / 5) : kControlBg);
+    g.roundRect(c.x, c.y, c.w, c.h, 6, on ? col : kControlEdge);
+
+    // Playhead indicator top bar
     if (host_.playing()) {
         const double ph = host_.beatPos() - std::floor(host_.beatPos());
-        if (int(ph * 4) == idx) g.fillRect(c.x + 2, c.y + 2, c.w - 4, 3, kText);
+        if (int(ph * 4) == idx) {
+            g.fillRoundRect(c.x + 4, c.y + 3, c.w - 8, 3, 1, rgb(255, 255, 255));
+        }
     }
     std::string s = c.kind == Kind::Fixed ? "KICK" : std::string("BASS ") + char('0' + idx);
-    g.text(c.x + c.w / 2, c.y + 17, s, on ? kText : kDim, 1, 1);
+    g.text(c.x + c.w / 2, c.y + (c.h - 7) / 2 + 1, s, on ? kText : kDim, 1, 1);
 }
 
 void Panel::drawScope(Graphics& g) {
     const int x0 = kScopeX, y0 = kScopeY, w = kScopeW, h = kScopeH;
-    g.fillRect(x0, y0, w, h, kPanel);
-    g.rect(x0 - 1, y0 - 1, w + 2, h + 2, kEdge);
-    const int py = y0 + 14, ph = h - 16, cy = py + ph / 2;
+
+    // Container background with rounded corners and card border
+    g.fillRoundRect(x0, y0, w, h, 6, kCardBg);
+    g.roundRect(x0, y0, w, h, 6, kCardEdge);
+
+    const int py = y0 + 16, ph = h - 20, cy = py + ph / 2;
     const BeatPlan& pl = preview_.plan;
     const double Tb = pl.Tbeat;
     auto tx = [&](double t) { return x0 + float(t / Tb * w); };
 
-    // lanes
-    const char* names[4] = {"K", "B1", "B2", "B3"};
+    // Lanes grid and headers
+    const char* names[4] = {"STEP 1 [KICK]", "STEP 2 [BASS 1]", "STEP 3 [BASS 2]", "STEP 4 [BASS 3]"};
     for (int i = 0; i < 4; ++i) {
-        if (i) g.fillRect(x0 + i * w / 4, y0, 1, h, kEdge);
+        if (i) g.line(x0 + i * w / 4, y0, x0 + i * w / 4, y0 + h, kCardEdge, 0.7f);
         const bool on = i == 0 || pl.notes[i - 1].active;
-        g.text(x0 + i * w / 4 + 5, y0 + 4, names[i], on ? (i ? kBass : kKick) : kDim);
+        g.text(x0 + i * w / 4 + 8, y0 + 5, names[i], on ? (i ? kBass : kKick) : kMuted);
     }
-    g.fillRect(x0, cy, w, 1, kEdge, 0.6f);
+    // Sub-beat grid divisions (1/32)
+    for (int i = 0; i < 8; ++i) {
+        if (i % 2 != 0) g.line(x0 + i * w / 8, y0 + 16, x0 + i * w / 8, y0 + h, rgb(28, 34, 44), 0.5f);
+    }
+    g.line(x0, cy, x0 + w, cy, kCardEdge, 0.6f);
 
     const float sc = (ph / 2.f - 2.f) / scopePeak_;
     for (int c = 0; c < w; ++c) {
-        g.line(x0 + c + 0.5f, cy - bMax_[c] * sc, x0 + c + 0.5f, cy - bMin_[c] * sc - 0.01f, kBass, 0.85f);
-        g.line(x0 + c + 0.5f, cy - kMax_[c] * sc, x0 + c + 0.5f, cy - kMin_[c] * sc - 0.01f, kKick, 0.85f);
+        // Translucent fill for bass & kick waveforms
+        if (std::fabs(bMax_[c] - bMin_[c]) > 0.001f)
+            g.thickLine(x0 + c + 0.5f, cy - bMax_[c] * sc, x0 + c + 0.5f, cy - bMin_[c] * sc, kBass, 1.f, 0.75f);
+        if (std::fabs(kMax_[c] - kMin_[c]) > 0.001f)
+            g.thickLine(x0 + c + 0.5f, cy - kMax_[c] * sc, x0 + c + 0.5f, cy - kMin_[c] * sc, kKick, 0.75f);
     }
 
-    // pitch curve (log axis 30 Hz .. 1.5 kHz)
+    // Pitch curve (log axis 30 Hz .. 1.5 kHz)
     const double tau = pl.kick.shape.tau;
     auto fy = [&](double f) {
         const double u = std::clamp(std::log(f / 30.0) / std::log(1500.0 / 30.0), 0.0, 1.0);
@@ -263,7 +323,7 @@ void Panel::drawScope(Graphics& g) {
         const double t = double(c) / w * Tb;
         if (t < tau) continue;
         const float y = fy(pl.kick.model.freq(t - tau)), x = x0 + c;
-        if (px > 0) g.line(px, pyy, x, y, kPitch, 0.8f);
+        if (px > 0) g.thickLine(px, pyy, x, y, kPitch, 1.5f, 0.85f);
         px = x; pyy = y;
     }
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0}) {
@@ -271,59 +331,70 @@ void Panel::drawScope(Graphics& g) {
         g.text(x0 + w - 7, int(fy(f)) - 3, fmt("%.0f", f), kPitch, 1, 2);
     }
     const double settle = tau + pl.kick.model.settleTime();
-    g.fillCircle(tx(settle), fy(pl.f0), 3.f, kPitch);
+    g.fillCircle(tx(settle), fy(pl.f0), 3.5f, kPitch);
+    g.circle(tx(settle), fy(pl.f0), 3.5f, rgb(255, 255, 255), 1.f);
 
-    // anchors
+    // Anchors
     for (int i = 0; i < 3; ++i) {
         const auto& n = pl.notes[i];
         if (!n.active) continue;
         const float x = tx(n.onset);
-        for (int y = py; y < py + ph; y += 4) g.fillRect(int(x), y, 1, 2, kAnchor, 0.8f);
-        g.text(int(x) + 3, y0 + h - 22, fmt("%+.1f DB", pl.flowGainDb[i]), kBass);
+        for (int y = py; y < py + ph; y += 4) g.fillRect(int(x), y, 1, 2, kAnchor, 0.9f);
+        g.fillRoundRect(int(x) + 3, y0 + h - 24, 52, 10, 2, kControlBg, 0.8f);
+        g.text(int(x) + 5, y0 + h - 22, fmt("%+.1f DB", pl.flowGainDb[i]), kBass);
         if (i == pl.firstActive) {
             const double ta = n.onset - tau;
             const double resid = wrapHalf(pl.kick.model.phase(ta) - pl.notes[i].phase0) * 360.0;
-            g.text(int(x) + 3, y0 + h - 12, fmt("ERR %.1f DEG", std::fabs(resid) < 0.05 ? 0.0 : resid), kAnchor);
+            g.fillRoundRect(int(x) + 3, y0 + h - 13, 76, 10, 2, kControlBg, 0.8f);
+            g.text(int(x) + 5, y0 + h - 11, fmt("ERR %.1f DEG", std::fabs(resid) < 0.05 ? 0.0 : resid), kAnchor);
         }
     }
-    // tail gate
+    // Tail gate marker
     if (!pl.followMode && pl.firstActive >= 0) {
         const float x = tx(tau + pl.kick.amp.gateEnd);
-        g.line(x, py + ph - 8, x - 4, py + ph, kGate);
-        g.line(x, py + ph - 8, x + 4, py + ph, kGate);
-        g.line(x - 4, py + ph, x + 4, py + ph, kGate);
+        g.thickLine(x, py + ph - 10, x - 5, py + ph, kGate, 1.5f);
+        g.thickLine(x, py + ph - 10, x + 5, py + ph, kGate, 1.5f);
+        g.thickLine(x - 5, py + ph, x + 5, py + ph, kGate, 1.5f);
     }
-    // playhead
+    // Animated Playhead
     if (host_.playing()) {
         const double b = host_.beatPos();
-        g.fillRect(x0 + int((b - std::floor(b)) * w), y0, 1, h, rgb(255, 255, 255), 0.7f);
+        const int pxHead = x0 + int((b - std::floor(b)) * w);
+        g.fillRect(pxHead, y0, 2, h, rgb(255, 255, 255), 0.85f);
     }
 }
 
 void Panel::drawHandoff(Graphics& g) {
-    const int x0 = 340, y0 = 224, w = 330, h = 88;
-    g.fillRect(x0, y0, w, h, kPanel);
-    g.rect(x0, y0, w, h, kEdge);
-    g.text(x0 + 4, y0 + 3, "HANDOFF +-3 MS AT FIRST ANCHOR", kDim);
+    const int x0 = 338, y0 = 224, w = 332, h = 88;
+    g.fillRoundRect(x0, y0, w, h, 6, kCardBg);
+    g.roundRect(x0, y0, w, h, 6, kCardEdge);
+
+    // Header tag
+    g.fillRoundRect(x0 + 6, y0 + 4, 172, 12, 2, kCardHeaderBg);
+    g.text(x0 + 10, y0 + 7, "HANDOFF +-3 MS AT FIRST ANCHOR", kDim);
+
     const BeatPlan& pl = preview_.plan;
     const int fs = 48000;
     if (pl.firstActive < 0) { g.text(x0 + w / 2, y0 + h / 2, "NO BASS STEP", kDim, 1, 1); return; }
     const double ta = pl.notes[pl.firstActive].onset;
     const long c = long(ta * fs), half = long(0.003 * fs);
-    const int cy = y0 + 14 + (h - 18) / 2;
-    g.fillRect(x0 + w / 2, y0 + 12, 1, h - 14, kAnchor, 0.6f);
-    g.fillRect(x0, cy, w, 1, kEdge, 0.6f);
+    const int cy = y0 + 16 + (h - 20) / 2;
+
+    // Anchor center line
+    g.line(x0 + w / 2, y0 + 16, x0 + w / 2, y0 + h, kAnchor, 0.7f);
+    g.line(x0, cy, x0 + w, cy, kCardEdge, 0.5f);
+
     float peak = 0.05f;
     for (long i = c - half; i <= c + half; ++i)
         if (i >= 0 && i < long(preview_.kick.size())) peak = std::max({peak, std::fabs(preview_.kick[i]), std::fabs(preview_.bass[i])});
-    const float sc = (h - 22) / 2.f / peak;
+    const float sc = (h - 24) / 2.f / peak;
     for (int pass = 0; pass < 2; ++pass) {
         const auto& v = pass ? preview_.kick : preview_.bass;
         float px = 0, pyy = 0;
         for (long i = c - half; i <= c + half; ++i) {
             if (i < 0 || i >= long(v.size())) continue;
             const float x = x0 + float(i - (c - half)) / (2 * half) * w, y = cy - v[i] * sc;
-            if (i > c - half) g.line(px, pyy, x, y, pass ? kKick : kBass);
+            if (i > c - half) g.thickLine(px, pyy, x, y, pass ? kKick : kBass, 1.5f, 0.9f);
             px = x; pyy = y;
         }
     }
@@ -332,10 +403,70 @@ void Panel::drawHandoff(Graphics& g) {
 void Panel::render(Graphics& g) {
     refreshPreview();
     g.clear(kBg);
-    g.text(14, 10, "KIKSET", kKick, 3);
-    g.text(14, 34, "KICK + BASS PHASE LOCK", kDim);
+
+    // Header Bar
+    g.fillGradientV(0, 0, W, 36, kHeaderBg, kBg);
+    g.line(0, 36, W, 36, kCardEdge, 0.8f);
+    g.text(14, 8, "KIKSET", kKick, 3);
+    g.text(132, 14, "COMBO KICK + BASS ENGINE", kDim);
+
     for (size_t i = 0; i < ctl_.size(); ++i) {
         const Ctl& c = ctl_[i];
+        if (c.y < 40) drawChoice(g, c); // Draw header controls top level
+    }
+
+    // Wide Oscilloscope Display
+    drawScope(g);
+
+    // Section 1: Pattern & Step Sequencer (Left Card)
+    g.fillRoundRect(14, 218, 312, 108, 6, kCardBg);
+    g.roundRect(14, 218, 312, 108, 6, kCardEdge);
+
+    // Section 2: Handoff Zoom (Middle Card)
+    drawHandoff(g);
+
+    // Section 3: Analytic Solver Display (Right Card)
+    g.fillRoundRect(680, 224, 206, 88, 6, kCardBg);
+    g.roundRect(680, 224, 206, 88, 6, kCardEdge);
+    const BeatPlan& pl = preview_.plan;
+    const auto& s = pl.solve;
+    g.fillRoundRect(686, 228, 54, 12, 2, kCardHeaderBg);
+    g.text(690, 231, "SOLVER", kAnchor);
+    g.text(690, 244, fmt("NUDGE %.2f MS", s.nudgeMs), kText);
+    g.text(690, 255, fmt("D PITCH %.0f C", s.dPitchCents), kText);
+    g.text(690, 266, fmt("D PHASE %.0f DEG", s.dPhaseDeg), kText);
+    g.text(690, 277, fmt("F0 %.1f HZ", pl.f0), kText);
+    g.fillRoundRect(800, 244, 78, 14, 3, s.converged ? rgb(0, 60, 40) : rgb(80, 20, 25));
+    g.roundRect(800, 244, 78, 14, 3, s.converged ? kBass : kGate);
+    g.text(839, 248, s.converged ? "LOCKED" : "UNLOCKED", s.converged ? kBass : kGate, 1, 1);
+    g.text(800, 266, fmt("RESID %.0E CYC", std::fabs(s.residual)), kDim);
+
+    // Section 4: Feel & Flow Row
+    g.fillRoundRect(332, 316, 554, 58, 6, kCardBg);
+    g.roundRect(332, 316, 554, 58, 6, kCardEdge);
+
+    // Section 5: Kick Synthesizer Panel
+    g.fillRoundRect(14, 378, 872, 55, 6, kCardBg);
+    g.roundRect(14, 378, 872, 55, 6, kCardEdge);
+    g.fillRoundRect(18, 382, 46, 47, 4, kCardHeaderBg);
+    g.text(41, 402, "KICK", kKick, 1, 1);
+
+    // Section 6: Kick Drive Panel
+    g.fillRoundRect(14, 434, 872, 55, 6, kCardBg);
+    g.roundRect(14, 434, 872, 55, 6, kCardEdge);
+    g.fillRoundRect(18, 438, 46, 47, 4, kCardHeaderBg);
+    g.text(41, 458, "DRIVE", kKick, 1, 1);
+
+    // Section 7: Bass Synthesizer Panel
+    g.fillRoundRect(14, 490, 872, 55, 6, kCardBg);
+    g.roundRect(14, 490, 872, 55, 6, kCardEdge);
+    g.fillRoundRect(18, 494, 46, 47, 4, kCardHeaderBg);
+    g.text(41, 514, "BASS", kBass, 1, 1);
+
+    // Render controls
+    for (size_t i = 0; i < ctl_.size(); ++i) {
+        const Ctl& c = ctl_[i];
+        if (c.y < 40) continue; // Already drawn header controls
         switch (c.kind) {
             case Kind::Knob: drawKnob(g, c); break;
             case Kind::Choice: drawChoice(g, c); break;
@@ -343,24 +474,6 @@ void Panel::render(Graphics& g) {
             case Kind::Fixed: drawStep(g, c, 0); break;
         }
     }
-    drawScope(g);
-    drawHandoff(g);
-    // solver read-outs
-    const BeatPlan& pl = preview_.plan;
-    const auto& s = pl.solve;
-    g.text(680, 228, "SOLVER", kAnchor);
-    g.text(680, 242, fmt("NUDGE %.2f MS", s.nudgeMs), kText);
-    g.text(680, 254, fmt("D PITCH %.0f C", s.dPitchCents), kText);
-    g.text(680, 266, fmt("D PHASE %.0f DEG", s.dPhaseDeg), kText);
-    g.text(680, 278, fmt("F0 %.1f HZ", pl.f0), kText);
-    g.text(680, 290, s.converged ? "LOCKED" : "NOT LOCKED", s.converged ? kBass : kGate);
-    g.text(680, 302, fmt("RESID %.0E CYC", std::fabs(s.residual)), kDim);
-    g.text(14, 334, "EMPHASIS AND STEP FEEL", kDim);
-    g.text(14, 346, "FLOW SHOWS AS DB IN SCOPE", kDim);
-    // section labels
-    g.text(10, 398, "KICK", kKick);
-    g.text(10, 454, "DRIVE", kKick);
-    g.text(10, 510, "BASS", kBass);
 }
 
 }  // namespace kikset::gui
