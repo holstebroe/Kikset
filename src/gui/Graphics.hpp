@@ -1,4 +1,4 @@
-// Tiny software renderer: 0x00RRGGBB framebuffer, AA lines/arcs, 5x7 bitmap font.
+// Tiny modern software renderer: 0x00RRGGBB framebuffer, AA lines/arcs, 5x7 bitmap font.
 #pragma once
 #include <algorithm>
 #include <cstdint>
@@ -20,16 +20,23 @@ public:
     void clear(Color c) { std::fill(px_.begin(), px_.end(), c); }
     void blend(int x, int y, Color c, float a);  // a in 0..1
     void fillRect(int x, int y, int w, int h, Color c, float a = 1.f);
+    void fillGradientV(int x, int y, int w, int h, Color c0, Color c1, float a = 1.f);
+    void fillGradientH(int x, int y, int w, int h, Color c0, Color c1, float a = 1.f);
+    void fillRoundRect(int x, int y, int w, int h, int r, Color c, float a = 1.f);
+    void roundRect(int x, int y, int w, int h, int r, Color c, float a = 1.f);
     void rect(int x, int y, int w, int h, Color c, float a = 1.f);
     void line(float x0, float y0, float x1, float y1, Color c, float a = 1.f);  // Wu, 1 px
-    void arc(float cx, float cy, float r, float a0, float a1, Color c, float thick = 2.f);
+    void thickLine(float x0, float y0, float x1, float y1, Color c, float thick = 2.f, float a = 1.f);
+    void arc(float cx, float cy, float r, float a0, float a1, Color c, float thick = 2.f, float a = 1.f);
     void fillCircle(float cx, float cy, float r, Color c, float a = 1.f);
+    void circle(float cx, float cy, float r, Color c, float thick = 1.f, float a = 1.f);
     // Uppercase-only 5x7 font. align: 0 left, 1 centre, 2 right.
     void text(int x, int y, const std::string& s, Color c, int scale = 1, int align = 0);
     static int textWidth(const std::string& s, int scale = 1) { return int(s.size()) * 6 * scale - scale; }
     bool writePpm(const char* path) const;
 
 private:
+    void blendFast(int x, int y, Color c, int alpha256);
     int w_, h_;
     std::vector<uint32_t> px_;
 };
